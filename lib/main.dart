@@ -112,6 +112,15 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _observationId;
   final Map<String, File> _photos = {};
 
+  final Map<String, String> photoViews = {
+    'LG': 'Latéral gauche',
+    'LD': 'Latérale droite',
+    'D': 'Dorsale',
+    'V': 'Ventrale',
+    'TF': 'Tête',
+    'C': 'Caudale',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -259,6 +268,17 @@ class _MyHomePageState extends State<MyHomePage> {
               _buildTextField(controller: _totalLengthController, label: 'Longueur totale', keyboardType: TextInputType.number),
               _buildTextField(controller: _remarksController, label: 'Remarques', maxLines: 3),
               const SizedBox(height: 20),
+              Text('Instructions pour la photo:', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              const Text(
+                '• Éviter les reflets directs sur les écailles.\n'
+                '• Le poisson doit être bien à plat (le plus possible).\n'
+                '• Assurez-vous que la queue apparaît sur l\'image.\n'
+                '• Même hauteur du sol et distance de la caméra et angle entre toutes les photos.\n'
+                '• Pas d\'ombres fortes, pas de doigts visibles, éviter les reflets d\'eau, pas de flou.\n'
+                '• Essuyer légèrement le poisson, retirer les débris.',
+              ),
+              const SizedBox(height: 20),
               Text('Photos', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 10),
               _buildPhotoGrid(),
@@ -300,7 +320,6 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildPhotoGrid() {
-    final photoViews = ['LG', 'LD', 'D', 'V', 'TF', 'C'];
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -308,14 +327,15 @@ class _MyHomePageState extends State<MyHomePage> {
         crossAxisCount: 3,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 1.5,
+        childAspectRatio: 1,
       ),
       itemCount: photoViews.length,
       itemBuilder: (context, index) {
-        final view = photoViews[index];
-        final photoFile = _photos[view];
+        final viewKey = photoViews.keys.elementAt(index);
+        final viewName = photoViews[viewKey];
+        final photoFile = _photos[viewKey];
         return ElevatedButton(
-          onPressed: () => _takePhoto(view),
+          onPressed: () => _takePhoto(viewKey),
           style: ElevatedButton.styleFrom(
             padding: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
@@ -332,7 +352,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     height: double.infinity,
                   ),
                 )
-              : Text(view),
+              : Text(viewName!, textAlign: TextAlign.center),
         );
       },
     );
