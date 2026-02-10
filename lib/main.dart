@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:archive/archive_io.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
 
 import 'database_helper.dart';
 import 'services.dart';
@@ -186,18 +187,40 @@ class _MyHomePageState extends State<MyHomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Observation enregistrée avec succès!')),
       );
-      _formKey.currentState!.reset();
-      setState(() {
-        _photos.clear();
-        _observationId = _uuid.v4();
-      });
+      _resetForm();
     }
   }
 
+  void _resetForm() {
+    _formKey.currentState?.reset();
+    _siteController.clear();
+    _speciesController.clear();
+    _latController.clear();
+    _longController.clear();
+    _tempController.clear();
+    _phController.clear();
+    _o2Controller.clear();
+    _sexeController.clear();
+    _stdLengthController.clear();
+    _totalLengthController.clear();
+    _remarksController.clear();
+    setState(() {
+      _photos.clear();
+      _observationId = _uuid.v4();
+    });
+  }
+
   void _exportData() async {
+    final observations = await _dbHelper.getObservations();
+    if (observations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucune observation à exporter.')),
+      );
+      return;
+    }
+
     final dbPath = await getDatabasesPath();
     final dbFile = File('$dbPath/marine_survey.db');
-    final observations = await _dbHelper.getObservations();
     List<File> imageFiles = [];
     for (var obs in observations) {
       final photosJson = jsonDecode(obs['photos_json']);
@@ -207,7 +230,10 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     final downloadsDirectory = await getDownloadsDirectory();
-    final zipFile = File('${downloadsDirectory!.path}/marine_survey_export.zip');
+    final now = DateTime.now();
+    final formatter = DateFormat('ddMMyyyy_HHmm');
+    final formattedDate = formatter.format(now);
+    final zipFile = File('${downloadsDirectory!.path}/marine_survey_export_$formattedDate.zip');
 
     var encoder = ZipFileEncoder();
     encoder.create(zipFile.path);

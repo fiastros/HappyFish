@@ -21,6 +21,7 @@ To get the apk you would have to download this repo and follow the installation 
 - [Author](#author)
 - [License](#license)
 - [Support](#support)
+- [ToDo](#todo)
 
 ## Stack
 
@@ -37,7 +38,16 @@ To get the apk you would have to download this repo and follow the installation 
 
 ## Getting Started
 
-idx.google.com
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
 
 ## Installation
 
@@ -57,7 +67,7 @@ To build the APK file, run the following command:
 ```bash
 flutter build apk
 ```
-The APK file will be located in the `build/app/outputs/flutter-apk/` directory.
+The APK file will be located in the `build/app/outputs/flutter-apk/` directory. The exported `marine_survey_export.zip` file will be saved in your device's "Downloads" folder.
 
 ## Citation
 
@@ -97,5 +107,25 @@ This project is provided for educational and research purposes. Attribution to t
 ## Support
 
 For issues, feature requests, or questions, please open an issue on the [GitHub repository](https://github.com/fiastros/HappyFish/issues).
+
+## ToDo
+
+V0.3
+- [x] Add the location of the stored data on the android device
+- [x] Correct the fact that the user can save .zip even if survey is empty
+- [x] Correct the fact after saving a survey the fields are still filled with previous answers
+V0.4
+- [x] when I export new file, i don't want to ovewrite previous "marine_survey_export.zip" but rather create a new name incremented with date time for example "marine_survey_export_09022026_1809.zip"
+v0.5
+- [ ] Check on android that images are not saved in standard image folder ? what happens after i delete app ? 
+- [ ] Whats happens if i just save observations without exporting and I minize the app, will I still be able to save ? 
+- [ ] If i save observations and close app, will i be able to later export apps ? 
+- [ ] If I save .zip close app and come back latter will i still be able to save empty folder ? 
+- [ ] check what happens when 
+
+## Instructions on how to use the app
+
+- after typing every information please save before exporting or closing the app !
+- you do not need to export after every save ! just write every observation and take the images and save Then at the end of the day, export the .zip or before your phone storage's get full
 
 ---
