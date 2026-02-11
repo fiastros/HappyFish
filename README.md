@@ -119,7 +119,6 @@ For issues, feature requests, or questions, please open an issue on the [GitHub 
 ## ToDo
 
 V0.3
-
 - [x] Add the location of the stored data on the android device
 - [x] Correct the fact that the user can save .zip even if survey is empty
 - [x] Correct the fact after saving a survey the fields are still filled with previous answers
@@ -128,11 +127,25 @@ V0.4
 - [x] when I export new file, i don't want to ovewrite previous "marine_survey_export.zip" but rather create a new name incremented with date time for example "marine_survey_export_09022026_1809.zip"
 
 v0.5
-- [ ] Check on android that images are not saved in standard image folder ? what happens after i delete app ? 
-- [ ] Whats happens if i just save observations without exporting and I minize the app, will I still be able to save ? 
-- [ ] If i save observations and close app, will i be able to later export apps ? 
-- [ ] If I save .zip close app and come back latter will i still be able to save empty folder ? 
-- [ ] check what happens when 
+- [x] Check on android that images are not saved in standard image folder ? what happens after i delete app ? No
+- [x] Whats happens if i just save observations without exporting and I minize the app, will I still be able to save ? Yes
+- [x] If I save .zip close app and come back latter will i still be able to save empty folder ? yes it will export previous dataset contained in .db if any
+
+v0.6: gemini 3 pro preview
+- [x] All the tabular information are mandatory to fill, but even if there's just one image I still want to be able to save that image and export it correctly. Currently when there's just a single image (with the tabular data) that data doesn't get saved or exported. To verify
+- [x] Export only once the .zip (it already contains updated .db and images). [default gemini version]
+
+V0.8
+- [x] Add a date cell in the form. On the first page show the datetime of each observation
+- [x] When the user modifies the form entries, the names of the image should also be changed. If he takes other pictures to replace the old ones, the new pictures should replace the old pictures accordingly. 
+
+V0.9
+- [x] When the user edits the forms, they are also updated in the db.
+- [x] If i save observations and close app, will i be able to later export apps ?
+- [ ] Run the app locally on my mac m1 with emulator
+- [ ] add a page for the user to edit the entries (form answers and photos) or delete the selected entry (answers + photos). correction: The user needs to be able to delete a individual photos on the ui. Currently the user cannot delete but rather change the photos by taking another one.
+- [ ] there's a bug when saving the first observation: Only 4 photos a saved (LG, LD,D, V) not the 2 others (TF, V). In the .db I can see the filnamaes of each 6 photos but their a not physically saved, this bug only happens when the user wants to export for the first time
+- [x] Can I add multiple observation at the same location and same species 
 
 
 ---

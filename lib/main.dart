@@ -8,7 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:archive/archive_io.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart'; // Make sure intl is added back to pubspec.yaml
+import 'package:path/path.dart' as path;
 
 import 'database_helper.dart';
 import 'services.dart';
@@ -77,27 +78,173 @@ class MyApp extends StatelessWidget {
           theme: lightTheme,
           darkTheme: darkTheme,
           themeMode: themeProvider.themeMode,
-          home: MyHomePage(),
+          home: const ObservationListScreen(),
         );
       },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+class ObservationListScreen extends StatefulWidget {
+  const ObservationListScreen({super.key});
 
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _ObservationListScreenState createState() => _ObservationListScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _ObservationListScreenState extends State<ObservationListScreen> {
+  final _dbHelper = DatabaseHelper.instance;
+  List<Map<String, dynamic>> _observations = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshObservations();
+  }
+
+  void _refreshObservations() async {
+    final data = await _dbHelper.getObservations();
+    setState(() {
+      _observations = data;
+    });
+  }
+
+  void _exportData() async {
+    try {
+      final observations = await _dbHelper.getObservations();
+      if (observations.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucune observation à exporter.')),
+        );
+        return;
+      }
+
+      final dbPath = await getDatabasesPath();
+      final dbFile = File('$dbPath/marine_survey.db');
+      List<File> imageFiles = [];
+      for (var obs in observations) {
+        if (obs['photos_json'] != null) {
+          final photosJson = jsonDecode(obs['photos_json']);
+          if (photosJson is Map) {
+            for (var path in photosJson.values) {
+              imageFiles.add(File(path));
+            }
+          }
+        }
+      }
+
+      final downloadsDirectory = await getDownloadsDirectory();
+      final zipFile = File('${downloadsDirectory!.path}/marine_survey_export.zip');
+
+      // Use Archive class directly to avoid issues with ZipFileEncoder
+      final archive = Archive();
+
+      // Add DB file
+      if (await dbFile.exists()) {
+         final dbBytes = await dbFile.readAsBytes();
+         final dbName = path.basename(dbFile.path);
+         archive.addFile(ArchiveFile(dbName, dbBytes.length, dbBytes));
+      }
+
+      // Add Image files
+      for (var file in imageFiles) {
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final name = path.basename(file.path);
+          archive.addFile(ArchiveFile(name, bytes.length, bytes));
+        }
+      }
+
+      final encoder = ZipEncoder();
+      final zipData = encoder.encode(archive);
+      if (zipData != null) {
+          await zipFile.writeAsBytes(zipData);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Données exportées vers ${zipFile.path}')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur lors de l\'exportation: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Journal de bord Marin'),
+        actions: [
+          IconButton(
+            icon: Icon(Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
+            onPressed: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+            tooltip: 'Changer de thème',
+          ),
+          IconButton(
+            icon: const Icon(Icons.archive),
+            onPressed: _exportData,
+            tooltip: 'Exporter les données',
+          ),
+        ],
+      ),
+      body: _observations.isEmpty
+          ? const Center(child: Text('Aucune observation enregistrée.'))
+          : ListView.builder(
+              itemCount: _observations.length,
+              itemBuilder: (context, index) {
+                final obs = _observations[index];
+                final date = obs['date'] ?? 'Date inconnue';
+                return ListTile(
+                  title: Text('${obs['site']} - ${obs['species']}'),
+                  subtitle: Text('Date: $date'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ObservationFormScreen(observation: obs),
+                      ),
+                    );
+                    _refreshObservations();
+                  },
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ObservationFormScreen(),
+            ),
+          );
+          _refreshObservations();
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class ObservationFormScreen extends StatefulWidget {
+  final Map<String, dynamic>? observation;
+
+  const ObservationFormScreen({super.key, this.observation});
+
+  @override
+  _ObservationFormScreenState createState() => _ObservationFormScreenState();
+}
+
+class _ObservationFormScreenState extends State<ObservationFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _locationService = LocationService();
   final _photoService = PhotoService();
   final _dbHelper = DatabaseHelper.instance;
   final _uuid = Uuid();
 
+  final _dateController = TextEditingController();
   final _siteController = TextEditingController();
   final _speciesController = TextEditingController();
   final _latController = TextEditingController();
@@ -111,6 +258,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final _remarksController = TextEditingController();
 
   String? _observationId;
+  int? _dbId;
   final Map<String, File> _photos = {};
 
   final Map<String, String> photoViews = {
@@ -125,7 +273,65 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _observationId = _uuid.v4();
+    if (widget.observation != null) {
+      _loadObservation(widget.observation!);
+    } else {
+      _observationId = _uuid.v4();
+      _dateController.text = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    }
+  }
+
+  void _loadObservation(Map<String, dynamic> obs) {
+    _dbId = obs['id'];
+    _dateController.text = obs['date'] ?? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    _siteController.text = obs['site'];
+    _speciesController.text = obs['species'];
+    _latController.text = obs['latitude'].toString();
+    _longController.text = obs['longitude'].toString();
+    _tempController.text = obs['temperature'].toString();
+    _phController.text = obs['ph'].toString();
+    _o2Controller.text = obs['o2_dissous'].toString();
+    _sexeController.text = obs['sexe'];
+    _stdLengthController.text = obs['standard_length'].toString();
+    _totalLengthController.text = obs['total_length'].toString();
+    _remarksController.text = obs['remarks'];
+    _observationId = obs['id_photos'];
+
+    if (obs['photos_json'] != null) {
+      final photosJson = jsonDecode(obs['photos_json']);
+      if (photosJson is Map) {
+        photosJson.forEach((key, value) {
+          _photos[key] = File(value);
+        });
+      }
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (pickedDate != null) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+      if (pickedTime != null) {
+         final DateTime finalDateTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+        setState(() {
+          _dateController.text = DateFormat('yyyy-MM-dd HH:mm').format(finalDateTime);
+        });
+      }
+    }
   }
 
   void _getLocation() async {
@@ -152,6 +358,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     try {
+      // Pass the view key directly (e.g., 'LG', 'TF') to ensure uniqueness in filename
       final photo = await _photoService.takePhoto(site, species, _observationId!, view);
       if (photo != null) {
         setState(() {
@@ -163,110 +370,148 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void _saveObservation() async {
-    if (_formKey.currentState!.validate()) {
-      final photosJson = jsonEncode(_photos.map((key, value) => MapEntry(key, value.path)));
-      final observation = {
-        'site': _siteController.text,
-        'species': _speciesController.text,
-        'latitude': double.tryParse(_latController.text) ?? 0.0,
-        'longitude': double.tryParse(_longController.text) ?? 0.0,
-        'temperature': double.tryParse(_tempController.text) ?? 0.0,
-        'ph': double.tryParse(_phController.text) ?? 0.0,
-        'o2_dissous': double.tryParse(_o2Controller.text) ?? 0.0,
-        'sexe': _sexeController.text,
-        'standard_length': double.tryParse(_stdLengthController.text) ?? 0.0,
-        'total_length': double.tryParse(_totalLengthController.text) ?? 0.0,
-        'id_photos': _observationId,
-        'remarks': _remarksController.text,
-        'photos_json': photosJson,
-      };
+  Future<void> _renameImages(String newSite, String newSpecies) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final Map<String, File> newPhotos = {};
 
-      await _dbHelper.insertObservation(observation);
+    for (var entry in _photos.entries) {
+      final view = entry.key;
+      final file = entry.value;
+      if (await file.exists()) {
+        final extension = path.extension(file.path);
+        // Ensure filename format matches creation logic: SITE_species_YYYYMMDD_IDphoto_VUE.jpg
+        // Use a consistent date format for renaming if needed, or keep original date?
+        // Let's use current date to avoid complexity or extract from filename?
+        // Simpler: use the existing _observationId and view.
+        // We need the date part. Let's reuse the logic from PhotoService or similar.
+        final now = DateTime.now();
+        final formattedDate = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+        
+        // Construct new filename
+        final newFileName = '${newSite}_${newSpecies}_${formattedDate}_${_observationId}_$view$extension';
+        final newPath = path.join(directory.path, newFileName);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Observation enregistrée avec succès!')),
-      );
-      _resetForm();
+        if (file.path != newPath) {
+            try {
+                final newFile = await file.rename(newPath);
+                newPhotos[view] = newFile;
+            } catch (e) {
+                print('Error renaming file: $e');
+                newPhotos[view] = file; // Keep old if rename fails
+            }
+        } else {
+            newPhotos[view] = file;
+        }
+      }
     }
-  }
-
-  void _resetForm() {
-    _formKey.currentState?.reset();
-    _siteController.clear();
-    _speciesController.clear();
-    _latController.clear();
-    _longController.clear();
-    _tempController.clear();
-    _phController.clear();
-    _o2Controller.clear();
-    _sexeController.clear();
-    _stdLengthController.clear();
-    _totalLengthController.clear();
-    _remarksController.clear();
     setState(() {
-      _photos.clear();
-      _observationId = _uuid.v4();
+        _photos.clear();
+        _photos.addAll(newPhotos);
     });
   }
 
-  void _exportData() async {
-    final observations = await _dbHelper.getObservations();
-    if (observations.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune observation à exporter.')),
+
+  void _saveObservation() async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        // Rename images if site or species changed (and we are updating)
+        if (_dbId != null) {
+             await _renameImages(_siteController.text, _speciesController.text);
+        }
+
+        final photosJson = jsonEncode(_photos.map((key, value) => MapEntry(key, value.path)));
+        final observation = {
+          'date': _dateController.text,
+          'site': _siteController.text,
+          'species': _speciesController.text,
+          'latitude': double.tryParse(_latController.text) ?? 0.0,
+          'longitude': double.tryParse(_longController.text) ?? 0.0,
+          'temperature': double.tryParse(_tempController.text) ?? 0.0,
+          'ph': double.tryParse(_phController.text) ?? 0.0,
+          'o2_dissous': double.tryParse(_o2Controller.text) ?? 0.0,
+          'sexe': _sexeController.text,
+          'standard_length': double.tryParse(_stdLengthController.text) ?? 0.0,
+          'total_length': double.tryParse(_totalLengthController.text) ?? 0.0,
+          'id_photos': _observationId,
+          'remarks': _remarksController.text,
+          'photos_json': photosJson,
+        };
+
+        if (_dbId != null) {
+          observation['id'] = _dbId!;
+          await _dbHelper.updateObservation(observation);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Observation mise à jour avec succès!')),
+          );
+        } else {
+          await _dbHelper.insertObservation(observation);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Observation enregistrée avec succès!')),
+          );
+        }
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'enregistrement: $e')),
+        );
+      }
+    }
+  }
+
+  void _deleteObservation() async {
+    if (_dbId != null) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirmer la suppression'),
+          content: const Text('Voulez-vous vraiment supprimer cette observation et ses photos ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        ),
       );
-      return;
-    }
 
-    final dbPath = await getDatabasesPath();
-    final dbFile = File('$dbPath/marine_survey.db');
-    List<File> imageFiles = [];
-    for (var obs in observations) {
-      final photosJson = jsonDecode(obs['photos_json']);
-      for (var path in photosJson.values) {
-        imageFiles.add(File(path));
+      if (confirm == true) {
+        try {
+          await _dbHelper.deleteObservation(_dbId!);
+          // Optional: Delete photos from filesystem
+          for (var file in _photos.values) {
+            if (await file.exists()) {
+              await file.delete();
+            }
+          }
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Observation supprimée.')),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur lors de la suppression: $e')),
+          );
+        }
       }
     }
-
-    final downloadsDirectory = await getDownloadsDirectory();
-    final now = DateTime.now();
-    final formatter = DateFormat('ddMMyyyy_HHmm');
-    final formattedDate = formatter.format(now);
-    final zipFile = File('${downloadsDirectory!.path}/marine_survey_export_$formattedDate.zip');
-
-    var encoder = ZipFileEncoder();
-    encoder.create(zipFile.path);
-    encoder.addFile(dbFile);
-
-    for (var file in imageFiles) {
-      if (await file.exists()) {
-        encoder.addFile(file);
-      }
-    }
-    encoder.close();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Données exportées vers ${zipFile.path}')),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Journal de bord Marin'),
+        title: Text(_dbId != null ? 'Modifier Observation' : 'Nouvelle Observation'),
         actions: [
-          IconButton(
-            icon: Icon(Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
-            onPressed: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-            tooltip: 'Changer de thème',
-          ),
-          IconButton(
-            icon: const Icon(Icons.archive),
-            onPressed: _exportData,
-            tooltip: 'Exporter les données',
-          ),
+          if (_dbId != null)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _deleteObservation,
+              tooltip: 'Supprimer',
+            ),
         ],
       ),
       body: SingleChildScrollView(
@@ -276,6 +521,12 @@ class _MyHomePageState extends State<MyHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              InkWell(
+                onTap: () => _selectDate(context),
+                child: IgnorePointer(
+                  child: _buildTextField(controller: _dateController, label: 'Date et Heure', keyboardType: TextInputType.datetime),
+                ),
+              ),
               _buildTextField(controller: _siteController, label: 'Site'),
               _buildTextField(controller: _speciesController, label: 'Espèce'),
               Row(
@@ -292,7 +543,7 @@ class _MyHomePageState extends State<MyHomePage> {
               _buildTextField(controller: _sexeController, label: 'Sexe'),
               _buildTextField(controller: _stdLengthController, label: 'Longueur standard', keyboardType: TextInputType.number),
               _buildTextField(controller: _totalLengthController, label: 'Longueur totale', keyboardType: TextInputType.number),
-              _buildTextField(controller: _remarksController, label: 'Remarques', maxLines: 3),
+              _buildTextField(controller: _remarksController, label: 'Remarques', maxLines: 3, isMandatory: false),
               const SizedBox(height: 20),
               Text('Instructions pour la photo:', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 10),
@@ -312,7 +563,7 @@ class _MyHomePageState extends State<MyHomePage> {
               Center(
                 child: ElevatedButton(
                   onPressed: _saveObservation,
-                  child: const Text('Enregistrer l\'observation'),
+                  child: Text(_dbId != null ? 'Mettre à jour' : 'Enregistrer'),
                 ),
               ),
             ],
@@ -322,7 +573,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, int maxLines = 1, TextInputType? keyboardType}) {
+  Widget _buildTextField({required TextEditingController controller, required String label, int maxLines = 1, TextInputType? keyboardType, bool isMandatory = true}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
@@ -335,12 +586,12 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         maxLines: maxLines,
         keyboardType: keyboardType,
-        validator: (value) {
+        validator: isMandatory ? (value) {
           if (value == null || value.isEmpty) {
             return 'Veuillez entrer une valeur';
           }
           return null;
-        },
+        } : null,
       ),
     );
   }

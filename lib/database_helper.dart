@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(path, version: 2, onCreate: _createDB, onUpgrade: _onUpgrade);
   }
 
   Future _createDB(Database db, int version) async {
@@ -30,6 +30,7 @@ CREATE TABLE observations (
   id $idType,
   site $textType,
   species $textType,
+  date $textType,
   latitude $doubleType,
   longitude $doubleType,
   temperature $doubleType,
@@ -45,14 +46,40 @@ CREATE TABLE observations (
 ''');
   }
 
-  Future<void> insertObservation(Map<String, dynamic> row) async {
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE observations ADD COLUMN date TEXT');
+    }
+  }
+
+  Future<int> insertObservation(Map<String, dynamic> row) async {
     final db = await instance.database;
-    await db.insert('observations', row);
+    return await db.insert('observations', row);
   }
 
   Future<List<Map<String, dynamic>>> getObservations() async {
     final db = await instance.database;
-    return await db.query('observations');
+    return await db.query('observations', orderBy: 'id DESC');
+  }
+
+  Future<int> updateObservation(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    int id = row['id'];
+    return await db.update(
+      'observations',
+      row,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> deleteObservation(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'observations',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future close() async {
