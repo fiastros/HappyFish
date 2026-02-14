@@ -144,8 +144,13 @@ V0.9
 - [x] If i save observations and close app, will i be able to later export apps ?
 - [ ] Run the app locally on my mac m1 with emulator
 - [ ] add a page for the user to edit the entries (form answers and photos) or delete the selected entry (answers + photos). correction: The user needs to be able to delete a individual photos on the ui. Currently the user cannot delete but rather change the photos by taking another one.
-- [ ] there's a bug when saving the first observation: Only 4 photos a saved (LG, LD,D, V) not the 2 others (TF, V). In the .db I can see the filnamaes of each 6 photos but their a not physically saved, this bug only happens when the user wants to export for the first time
+- [x] there's a bug when saving the first observation: Only 4 photos a saved (LG, LD,D, V) not the 2 others (TF, V). In the .db I can see the filnamaes of each 6 photos but their a not physically saved, this bug only happens when the user wants to export for the first time
 - [x] Can I add multiple observation at the same location and same species 
+
+V1.0
+- [x] Change the type of gps coordinates from DD (Decimal Degree) to DMS (Degrees, Minutes, Seconds)
+- [x] add a nice ui for integrating the new type of gps coordinates, instead of two cells for lat and long, replace with 4 cells (Degree, Minutes, Second, Direction) for each lat and lon.
+- [x] Changed the type of "Sexe" entry to be a droplist with choice: "Male" or "Femelle".
 
 
 ---

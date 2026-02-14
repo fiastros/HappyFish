@@ -8,11 +8,12 @@ import 'package:provider/provider.dart';
 import 'package:archive/archive_io.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
-import 'package:intl/intl.dart'; // Make sure intl is added back to pubspec.yaml
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 
 import 'database_helper.dart';
 import 'services.dart';
+import 'utils.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -113,9 +114,11 @@ class _ObservationListScreenState extends State<ObservationListScreen> {
     try {
       final observations = await _dbHelper.getObservations();
       if (observations.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aucune observation à exporter.')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Aucune observation à exporter.')),
+          );
+        }
         return;
       }
 
@@ -136,17 +139,14 @@ class _ObservationListScreenState extends State<ObservationListScreen> {
       final downloadsDirectory = await getDownloadsDirectory();
       final zipFile = File('${downloadsDirectory!.path}/marine_survey_export.zip');
 
-      // Use Archive class directly to avoid issues with ZipFileEncoder
       final archive = Archive();
 
-      // Add DB file
       if (await dbFile.exists()) {
-         final dbBytes = await dbFile.readAsBytes();
-         final dbName = path.basename(dbFile.path);
-         archive.addFile(ArchiveFile(dbName, dbBytes.length, dbBytes));
+        final dbBytes = await dbFile.readAsBytes();
+        final dbName = path.basename(dbFile.path);
+        archive.addFile(ArchiveFile(dbName, dbBytes.length, dbBytes));
       }
 
-      // Add Image files
       for (var file in imageFiles) {
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
@@ -157,17 +157,19 @@ class _ObservationListScreenState extends State<ObservationListScreen> {
 
       final encoder = ZipEncoder();
       final zipData = encoder.encode(archive);
-      if (zipData != null) {
-          await zipFile.writeAsBytes(zipData);
+      await zipFile.writeAsBytes(zipData!);
+    
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Données exportées vers ${zipFile.path}')),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Données exportées vers ${zipFile.path}')),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de l\'exportation: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'exportation: $e')),
+        );
+      }
     }
   }
 
@@ -178,7 +180,9 @@ class _ObservationListScreenState extends State<ObservationListScreen> {
         title: const Text('Journal de bord Marin'),
         actions: [
           IconButton(
-            icon: Icon(Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
+            icon: Icon(Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark
+                ? Icons.light_mode
+                : Icons.dark_mode),
             onPressed: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
             tooltip: 'Changer de thème',
           ),
@@ -247,12 +251,20 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
   final _dateController = TextEditingController();
   final _siteController = TextEditingController();
   final _speciesController = TextEditingController();
-  final _latController = TextEditingController();
-  final _longController = TextEditingController();
+
+  final _latDegreesController = TextEditingController();
+  final _latMinutesController = TextEditingController();
+  final _latSecondsController = TextEditingController();
+  String _latDirection = 'N';
+
+  final _lonDegreesController = TextEditingController();
+  final _lonMinutesController = TextEditingController();
+  final _lonSecondsController = TextEditingController();
+  String _lonDirection = 'E';
+
   final _tempController = TextEditingController();
   final _phController = TextEditingController();
   final _o2Controller = TextEditingController();
-  final _sexeController = TextEditingController();
   final _stdLengthController = TextEditingController();
   final _totalLengthController = TextEditingController();
   final _remarksController = TextEditingController();
@@ -260,6 +272,7 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
   String? _observationId;
   int? _dbId;
   final Map<String, File> _photos = {};
+  String? _selectedSexe;
 
   final Map<String, String> photoViews = {
     'LG': 'Latéral gauche',
@@ -278,6 +291,7 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
     } else {
       _observationId = _uuid.v4();
       _dateController.text = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+      _selectedSexe = 'Male';
     }
   }
 
@@ -286,12 +300,30 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
     _dateController.text = obs['date'] ?? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
     _siteController.text = obs['site'];
     _speciesController.text = obs['species'];
-    _latController.text = obs['latitude'].toString();
-    _longController.text = obs['longitude'].toString();
+
+    double lat = obs['latitude'] is double
+        ? obs['latitude']
+        : (double.tryParse(obs['latitude'].toString()) ?? 0.0);
+    double lon = obs['longitude'] is double
+        ? obs['longitude']
+        : (double.tryParse(obs['longitude'].toString()) ?? 0.0);
+
+    final latDMS = decimalToDMS(lat, true);
+    _latDegreesController.text = latDMS.degrees.toString();
+    _latMinutesController.text = latDMS.minutes.toString();
+    _latSecondsController.text = latDMS.seconds.toStringAsFixed(2);
+    _latDirection = latDMS.direction;
+
+    final lonDMS = decimalToDMS(lon, false);
+    _lonDegreesController.text = lonDMS.degrees.toString();
+    _lonMinutesController.text = lonDMS.minutes.toString();
+    _lonSecondsController.text = lonDMS.seconds.toStringAsFixed(2);
+    _lonDirection = lonDMS.direction;
+
     _tempController.text = obs['temperature'].toString();
     _phController.text = obs['ph'].toString();
     _o2Controller.text = obs['o2_dissous'].toString();
-    _sexeController.text = obs['sexe'];
+    _selectedSexe = obs['sexe'];
     _stdLengthController.text = obs['standard_length'].toString();
     _totalLengthController.text = obs['total_length'].toString();
     _remarksController.text = obs['remarks'];
@@ -315,21 +347,23 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
       lastDate: DateTime(2101),
     );
     if (pickedDate != null) {
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.now(),
-      );
-      if (pickedTime != null) {
-         final DateTime finalDateTime = DateTime(
-          pickedDate.year,
-          pickedDate.month,
-          pickedDate.day,
-          pickedTime.hour,
-          pickedTime.minute,
+      if (context.mounted) {
+        final TimeOfDay? pickedTime = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.now(),
         );
-        setState(() {
-          _dateController.text = DateFormat('yyyy-MM-dd HH:mm').format(finalDateTime);
-        });
+        if (pickedTime != null) {
+          final DateTime finalDateTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+          setState(() {
+            _dateController.text = DateFormat('yyyy-MM-dd HH:mm').format(finalDateTime);
+          });
+        }
       }
     }
   }
@@ -338,11 +372,22 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
     try {
       final position = await _locationService.getCurrentLocation();
       setState(() {
-        _latController.text = position.latitude.toString();
-        _longController.text = position.longitude.toString();
+        final latDMS = decimalToDMS(position.latitude, true);
+        _latDegreesController.text = latDMS.degrees.toString();
+        _latMinutesController.text = latDMS.minutes.toString();
+        _latSecondsController.text = latDMS.seconds.toStringAsFixed(2);
+        _latDirection = latDMS.direction;
+
+        final lonDMS = decimalToDMS(position.longitude, false);
+        _lonDegreesController.text = lonDMS.degrees.toString();
+        _lonMinutesController.text = lonDMS.minutes.toString();
+        _lonSecondsController.text = lonDMS.seconds.toStringAsFixed(2);
+        _lonDirection = lonDMS.direction;
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 
@@ -351,14 +396,16 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
     final species = _speciesController.text;
 
     if (site.isEmpty || species.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez remplir les champs Site et Espèce avant de prendre une photo.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Veuillez remplir les champs Site et Espèce avant de prendre une photo.')),
+        );
+      }
       return;
     }
 
     try {
-      // Pass the view key directly (e.g., 'LG', 'TF') to ensure uniqueness in filename
       final photo = await _photoService.takePhoto(site, species, _observationId!, view);
       if (photo != null) {
         setState(() {
@@ -366,7 +413,10 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur lors de la prise de photo: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Erreur lors de la prise de photo: $e')));
+      }
     }
   }
 
@@ -379,44 +429,58 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
       final file = entry.value;
       if (await file.exists()) {
         final extension = path.extension(file.path);
-        // Ensure filename format matches creation logic: SITE_species_YYYYMMDD_IDphoto_VUE.jpg
-        // Use a consistent date format for renaming if needed, or keep original date?
-        // Let's use current date to avoid complexity or extract from filename?
-        // Simpler: use the existing _observationId and view.
-        // We need the date part. Let's reuse the logic from PhotoService or similar.
         final now = DateTime.now();
-        final formattedDate = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-        
-        // Construct new filename
+        final formattedDate =
+            '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
         final newFileName = '${newSite}_${newSpecies}_${formattedDate}_${_observationId}_$view$extension';
         final newPath = path.join(directory.path, newFileName);
 
         if (file.path != newPath) {
-            try {
-                final newFile = await file.rename(newPath);
-                newPhotos[view] = newFile;
-            } catch (e) {
-                print('Error renaming file: $e');
-                newPhotos[view] = file; // Keep old if rename fails
-            }
-        } else {
+          try {
+            final newFile = await file.rename(newPath);
+            newPhotos[view] = newFile;
+          } catch (e) {
             newPhotos[view] = file;
+          }
+        } else {
+          newPhotos[view] = file;
         }
       }
     }
     setState(() {
-        _photos.clear();
-        _photos.addAll(newPhotos);
+      _photos.clear();
+      _photos.addAll(newPhotos);
     });
   }
 
-
   void _saveObservation() async {
     if (_formKey.currentState!.validate()) {
+      final latDegrees = int.tryParse(_latDegreesController.text) ?? 0;
+      final latMinutes = int.tryParse(_latMinutesController.text) ?? 0;
+      final latSeconds = double.tryParse(_latSecondsController.text) ?? 0.0;
+
+      final lonDegrees = int.tryParse(_lonDegreesController.text) ?? 0;
+      final lonMinutes = int.tryParse(_lonMinutesController.text) ?? 0;
+      final lonSeconds = double.tryParse(_lonSecondsController.text) ?? 0.0;
+
+      final latitude = dmsToDecimal(
+        degrees: latDegrees,
+        minutes: latMinutes,
+        seconds: latSeconds,
+        direction: _latDirection,
+      );
+
+      final longitude = dmsToDecimal(
+        degrees: lonDegrees,
+        minutes: lonMinutes,
+        seconds: lonSeconds,
+        direction: _lonDirection,
+      );
+
       try {
-        // Rename images if site or species changed (and we are updating)
         if (_dbId != null) {
-             await _renameImages(_siteController.text, _speciesController.text);
+          await _renameImages(_siteController.text, _speciesController.text);
         }
 
         final photosJson = jsonEncode(_photos.map((key, value) => MapEntry(key, value.path)));
@@ -424,12 +488,12 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
           'date': _dateController.text,
           'site': _siteController.text,
           'species': _speciesController.text,
-          'latitude': double.tryParse(_latController.text) ?? 0.0,
-          'longitude': double.tryParse(_longController.text) ?? 0.0,
+          'latitude': latitude,
+          'longitude': longitude,
           'temperature': double.tryParse(_tempController.text) ?? 0.0,
           'ph': double.tryParse(_phController.text) ?? 0.0,
           'o2_dissous': double.tryParse(_o2Controller.text) ?? 0.0,
-          'sexe': _sexeController.text,
+          'sexe': _selectedSexe,
           'standard_length': double.tryParse(_stdLengthController.text) ?? 0.0,
           'total_length': double.tryParse(_totalLengthController.text) ?? 0.0,
           'id_photos': _observationId,
@@ -440,20 +504,28 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
         if (_dbId != null) {
           observation['id'] = _dbId!;
           await _dbHelper.updateObservation(observation);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Observation mise à jour avec succès!')),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Observation mise à jour avec succès!')),
+            );
+          }
         } else {
           await _dbHelper.insertObservation(observation);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Observation enregistrée avec succès!')),
+            );
+          }
+        }
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Observation enregistrée avec succès!')),
+            SnackBar(content: Text('Erreur lors de l\'enregistrement: $e')),
           );
         }
-        Navigator.pop(context);
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de l\'enregistrement: $e')),
-        );
       }
     }
   }
@@ -481,20 +553,23 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
       if (confirm == true) {
         try {
           await _dbHelper.deleteObservation(_dbId!);
-          // Optional: Delete photos from filesystem
           for (var file in _photos.values) {
             if (await file.exists()) {
               await file.delete();
             }
           }
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Observation supprimée.')),
-          );
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Observation supprimée.')),
+            );
+          }
         } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de la suppression: $e')),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Erreur lors de la suppression: $e')),
+            );
+          }
         }
       }
     }
@@ -524,26 +599,136 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
               InkWell(
                 onTap: () => _selectDate(context),
                 child: IgnorePointer(
-                  child: _buildTextField(controller: _dateController, label: 'Date et Heure', keyboardType: TextInputType.datetime),
+                  child: _buildTextField(
+                      controller: _dateController,
+                      label: 'Date et Heure',
+                      keyboardType: TextInputType.datetime),
                 ),
               ),
               _buildTextField(controller: _siteController, label: 'Site'),
               _buildTextField(controller: _speciesController, label: 'Espèce'),
-              Row(
-                children: [
-                  Expanded(child: _buildTextField(controller: _latController, label: 'Latitude', keyboardType: TextInputType.number)),
-                  const SizedBox(width: 10),
-                  Expanded(child: _buildTextField(controller: _longController, label: 'Longitude', keyboardType: TextInputType.number)),
-                  IconButton(icon: const Icon(Icons.location_searching), onPressed: _getLocation),
-                ],
+              _buildDMSInput(
+                label: 'Latitude',
+                degreesController: _latDegreesController,
+                minutesController: _latMinutesController,
+                secondsController: _latSecondsController,
+                direction: _latDirection,
+                onDirectionChanged: (value) {
+                  setState(() {
+                    _latDirection = value!;
+                  });
+                },
+                directions: ['N', 'S'],
               ),
-              _buildTextField(controller: _tempController, label: 'Température', keyboardType: TextInputType.number),
-              _buildTextField(controller: _phController, label: 'pH', keyboardType: TextInputType.number),
-              _buildTextField(controller: _o2Controller, label: 'O2 dissous', keyboardType: TextInputType.number),
-              _buildTextField(controller: _sexeController, label: 'Sexe'),
-              _buildTextField(controller: _stdLengthController, label: 'Longueur standard', keyboardType: TextInputType.number),
-              _buildTextField(controller: _totalLengthController, label: 'Longueur totale', keyboardType: TextInputType.number),
-              _buildTextField(controller: _remarksController, label: 'Remarques', maxLines: 3, isMandatory: false),
+              _buildDMSInput(
+                label: 'Longitude',
+                degreesController: _lonDegreesController,
+                minutesController: _lonMinutesController,
+                secondsController: _lonSecondsController,
+                direction: _lonDirection,
+                onDirectionChanged: (value) {
+                  setState(() {
+                    _lonDirection = value!;
+                  });
+                },
+                directions: ['E', 'W'],
+              ),
+              IconButton(icon: const Icon(Icons.location_searching), onPressed: _getLocation),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: TextFormField(
+                  controller: _tempController,
+                  decoration: InputDecoration(
+                    labelText: 'Température',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez entrer une valeur';
+                    }
+                    final temp = double.tryParse(value);
+                    if (temp == null) {
+                      return 'Veuillez entrer un nombre valide';
+                    }
+                    if (temp < 0 || temp > 100) {
+                      return 'La température doit être entre 0 et 100';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: TextFormField(
+                  controller: _phController,
+                  decoration: InputDecoration(
+                    labelText: 'pH',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez entrer une valeur';
+                    }
+                    final ph = double.tryParse(value);
+                    if (ph == null) {
+                      return 'Veuillez entrer un nombre valide';
+                    }
+                    if (ph < 0 || ph > 14) {
+                      return 'Le pH doit être entre 0 et 14';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              _buildTextField(
+                  controller: _o2Controller,
+                  label: 'O2 dissous',
+                  keyboardType: TextInputType.number),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: DropdownButtonFormField<String>(
+                  value: _selectedSexe,
+                  decoration: InputDecoration(
+                    labelText: 'Sexe',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                  ),
+                  items: ['Male', 'Femelle'].map((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                  onChanged: (newValue) {
+                    setState(() {
+                      _selectedSexe = newValue;
+                    });
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez sélectionner un sexe';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              _buildTextField(
+                  controller: _stdLengthController,
+                  label: 'Longueur standard',
+                  keyboardType: TextInputType.number),
+              _buildTextField(
+                  controller: _totalLengthController,
+                  label: 'Longueur totale',
+                  keyboardType: TextInputType.number),
+              _buildTextField(
+                  controller: _remarksController, label: 'Remarques', maxLines: 3, isMandatory: false),
               const SizedBox(height: 20),
               Text('Instructions pour la photo:', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 10),
@@ -573,7 +758,12 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, int maxLines = 1, TextInputType? keyboardType, bool isMandatory = true}) {
+  Widget _buildTextField(
+      {required TextEditingController controller,
+      required String label,
+      int maxLines = 1,
+      TextInputType? keyboardType,
+      bool isMandatory = true}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
@@ -586,12 +776,76 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
         ),
         maxLines: maxLines,
         keyboardType: keyboardType,
-        validator: isMandatory ? (value) {
-          if (value == null || value.isEmpty) {
-            return 'Veuillez entrer une valeur';
-          }
-          return null;
-        } : null,
+        validator: isMandatory
+            ? (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Veuillez entrer une valeur';
+                }
+                return null;
+              }
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildDMSInput({
+    required String label,
+    required TextEditingController degreesController,
+    required TextEditingController minutesController,
+    required TextEditingController secondsController,
+    required String direction,
+    required ValueChanged<String?> onDirectionChanged,
+    required List<String> directions,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: 70, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+            child: _buildTextField(
+              controller: degreesController,
+              label: '°',
+              keyboardType: TextInputType.number,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildTextField(
+              controller: minutesController,
+              label: '’',
+              keyboardType: TextInputType.number,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildTextField(
+              controller: secondsController,
+              label: '”',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 70,
+            child: DropdownButtonFormField<String>(
+              initialValue: direction,
+              items: directions.map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              onChanged: onDirectionChanged,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
