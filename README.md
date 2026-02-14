@@ -151,6 +151,7 @@ V1.0
 - [x] Change the type of gps coordinates from DD (Decimal Degree) to DMS (Degrees, Minutes, Seconds)
 - [x] add a nice ui for integrating the new type of gps coordinates, instead of two cells for lat and long, replace with 4 cells (Degree, Minutes, Second, Direction) for each lat and lon.
 - [x] Changed the type of "Sexe" entry to be a droplist with choice: "Male" or "Femelle".
+- [ ] Update the previews/screenshots of the mobile on this README
 
 
 ---
