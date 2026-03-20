@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 2, onCreate: _createDB, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 4, onCreate: _createDB, onUpgrade: _onUpgrade);
   }
 
   Future _createDB(Database db, int version) async {
@@ -36,6 +36,14 @@ CREATE TABLE observations (
   temperature $doubleType,
   ph $doubleType,
   o2_dissous $doubleType,
+  poids $doubleType,
+  conductivite $doubleType,
+  maturite $textType,
+  vitesse_courant $textType,
+  transparence $textType,
+  profondeur $textType,
+  substrat $textType,
+  macrophytes $textType,
   sexe $textType,
   standard_length $doubleType,
   total_length $doubleType,
@@ -49,6 +57,18 @@ CREATE TABLE observations (
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE observations ADD COLUMN date TEXT');
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE observations ADD COLUMN poids REAL NOT NULL DEFAULT 0.0');
+      await db.execute('ALTER TABLE observations ADD COLUMN maturite TEXT NOT NULL DEFAULT \'\'');
+      await db.execute('ALTER TABLE observations ADD COLUMN vitesse_courant TEXT NOT NULL DEFAULT \'\'');
+      await db.execute('ALTER TABLE observations ADD COLUMN transparence TEXT NOT NULL DEFAULT \'\'');
+      await db.execute('ALTER TABLE observations ADD COLUMN profondeur TEXT NOT NULL DEFAULT \'\'');
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE observations ADD COLUMN conductivite REAL NOT NULL DEFAULT 0.0');
+      await db.execute('ALTER TABLE observations ADD COLUMN substrat TEXT NOT NULL DEFAULT \'\'');
+      await db.execute('ALTER TABLE observations ADD COLUMN macrophytes TEXT NOT NULL DEFAULT \'\'');
     }
   }
 

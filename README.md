@@ -153,5 +153,16 @@ V1.0
 - [x] Changed the type of "Sexe" entry to be a droplist with choice: "Male" or "Femelle".
 - [ ] Update the previews/screenshots of the mobile on this README
 
+V1.1
+- [x] add an entry for the weight of individuals
+- [x] add an entry for the "maturité sexuelle": (1, 2, 3, 4, 5)
+- [x] add an entry for the "conductivité"
+- [x] add an entry for the "transparence": (Très trouble, Trouble, Claire)
+- [x] add an entry for the "vitesse du courant": (Nulle, Faible, Moyenne, Forte)
+- [x] add an entry for the "profondeur": (Faible < 2m, Moyenne 2-5m, Importante > 5m)
+- [x] add an entry for the "Nature du substrat": rochets, galets, sables, presence de cavités
+- [x] add an entry for the "Présence de macrophytes": oui/non
+- [x] verify the precision of the gps on the mobile app
+
 
 ---

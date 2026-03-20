@@ -157,7 +157,7 @@ class _ObservationListScreenState extends State<ObservationListScreen> {
 
       final encoder = ZipEncoder();
       final zipData = encoder.encode(archive);
-      await zipFile.writeAsBytes(zipData!);
+      await zipFile.writeAsBytes(zipData);
     
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -268,11 +268,20 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
   final _stdLengthController = TextEditingController();
   final _totalLengthController = TextEditingController();
   final _remarksController = TextEditingController();
+  final _poidsController = TextEditingController();
+  final _conductiviteController = TextEditingController();
+
+  String? _selectedSexe;
+  String? _selectedMaturite;
+  String? _selectedVitesseCourant;
+  String? _selectedTransparence;
+  String? _selectedProfondeur;
+  String? _selectedSubstrat;
+  String? _selectedMacrophytes;
 
   String? _observationId;
   int? _dbId;
   final Map<String, File> _photos = {};
-  String? _selectedSexe;
 
   final Map<String, String> photoViews = {
     'LG': 'Latéral gauche',
@@ -292,6 +301,12 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
       _observationId = _uuid.v4();
       _dateController.text = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
       _selectedSexe = 'Male';
+      _selectedMaturite = '1';
+      _selectedVitesseCourant = 'Nulle';
+      _selectedTransparence = 'Claire';
+      _selectedProfondeur = 'Faible < 2m';
+      _selectedSubstrat = 'Roches';
+      _selectedMacrophytes = 'Non';
     }
   }
 
@@ -323,6 +338,14 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
     _tempController.text = obs['temperature'].toString();
     _phController.text = obs['ph'].toString();
     _o2Controller.text = obs['o2_dissous'].toString();
+    _poidsController.text = obs['poids'].toString();
+    _conductiviteController.text = obs['conductivite'].toString();
+    _selectedMaturite = obs['maturite'];
+    _selectedVitesseCourant = obs['vitesse_courant'];
+    _selectedTransparence = obs['transparence'];
+    _selectedProfondeur = obs['profondeur'];
+    _selectedSubstrat = obs['substrat'];
+    _selectedMacrophytes = obs['macrophytes'];
     _selectedSexe = obs['sexe'];
     _stdLengthController.text = obs['standard_length'].toString();
     _totalLengthController.text = obs['total_length'].toString();
@@ -493,6 +516,14 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
           'temperature': double.tryParse(_tempController.text) ?? 0.0,
           'ph': double.tryParse(_phController.text) ?? 0.0,
           'o2_dissous': double.tryParse(_o2Controller.text) ?? 0.0,
+          'poids': double.tryParse(_poidsController.text) ?? 0.0,
+          'conductivite': double.tryParse(_conductiviteController.text) ?? 0.0,
+          'maturite': _selectedMaturite,
+          'vitesse_courant': _selectedVitesseCourant,
+          'transparence': _selectedTransparence,
+          'profondeur': _selectedProfondeur,
+          'substrat': _selectedSubstrat,
+          'macrophytes': _selectedMacrophytes,
           'sexe': _selectedSexe,
           'standard_length': double.tryParse(_stdLengthController.text) ?? 0.0,
           'total_length': double.tryParse(_totalLengthController.text) ?? 0.0,
@@ -690,10 +721,72 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
                   controller: _o2Controller,
                   label: 'O2 dissous',
                   keyboardType: TextInputType.number),
+              _buildTextField(
+                controller: _poidsController,
+                label: 'Poids (g)',
+                keyboardType: TextInputType.number),
+               _buildTextField(
+                controller: _conductiviteController,
+                label: 'Conductivité (µS/cm)',
+                keyboardType: TextInputType.number),
+              _buildDropdownField(
+                label: 'Stade de maturité',
+                value: _selectedMaturite,
+                items: ['1', '2', '3', '4', '5'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedMaturite = value;
+                  });
+                }),
+              _buildDropdownField(
+                label: 'Vitesse du courant',
+                value: _selectedVitesseCourant,
+                items: ['Nulle', 'Faible', 'Moyenne', 'Forte'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedVitesseCourant = value;
+                  });
+                }),
+              _buildDropdownField(
+                label: 'Transparence',
+                value: _selectedTransparence,
+                items: ['Très trouble', 'Trouble', 'Claire'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedTransparence = value;
+                  });
+                }),
+              _buildDropdownField(
+                label: 'Profondeur',
+                value: _selectedProfondeur,
+                items: ['Faible < 2m', 'Moyenne 2-5m', 'Importante > 5m'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedProfondeur = value;
+                  });
+                }),
+              _buildDropdownField(
+                label: 'Nature du substrat',
+                value: _selectedSubstrat,
+                items: ['Roches', 'Galets', 'Sable', 'Vase'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedSubstrat = value;
+                  });
+                }),
+              _buildDropdownField(
+                label: 'Présence de macrophytes',
+                value: _selectedMacrophytes,
+                items: ['Oui', 'Non'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedMacrophytes = value;
+                  });
+                }),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: DropdownButtonFormField<String>(
-                  value: _selectedSexe,
+                  initialValue: _selectedSexe,
                   decoration: InputDecoration(
                     labelText: 'Sexe',
                     border: OutlineInputBorder(
@@ -784,6 +877,39 @@ class _ObservationFormScreenState extends State<ObservationFormScreen> {
                 return null;
               }
             : null,
+      ),
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: DropdownButtonFormField<String>(
+        initialValue: value,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+        items: items.map((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(value),
+          );
+        }).toList(),
+        onChanged: onChanged,
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Veuillez sélectionner une valeur';
+          }
+          return null;
+        },
       ),
     );
   }
